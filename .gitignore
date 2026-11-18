@@ -1,0 +1,17 @@
+# 秘密の情報
+.env
+*.key
+*secret*
+*token*
+
+# 作業中の一時ファイル
+tmp/
+*.tmp
+.DS_Store
+Thumbs.db
+
+# 大きい動画・音声は SharePoint に置く（リポジトリに入れない）
+*.mp4
+*.mov
+*.wav
+*.m4a
