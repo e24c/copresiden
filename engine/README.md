@@ -5,7 +5,7 @@
 | 入稿の取り込み | Jotform APIで入稿と添付を取る（`GET /submission/<送信ID>`）。SharePointに移ったのを確かめてから `DELETE /submission/<送信ID>` を2回 | 手作業で確認済み（スクリプト化はこれから） |
 | 中身の読み取り | 音声：faster-whisper（medium、`HF_HUB_DISABLE_XET=1`）。字幕：1秒ごとのコマを読む | 手作業で確認済み |
 | 台本 | 型・台帳・ルールから作り、`customers/<お客様>/work/<送信ID>.script.json` に書く | 台本JSONの形を決めた |
-| 写真 | Geminiで生成。お客様の写真を優先する | 環境変数 `GEMINI_API_KEY` があれば `photo_prompt` から写真を作る（未試験）。無ければ図のカード |
+| 写真 | Geminiで生成。お客様の写真を優先する | 環境変数 `GEMINI_API_KEY` があれば `photo_prompt` から写真を作る（2026-11-19 A.ENで試験済み）。無ければ図のカード |
 | 声 | お客様の声のモデルで合成する | **仮**：Open JTalk の標準の声（`make_video.py` の `synth()` を差し替える） |
 | アバター | 左下に小さく、オープニングだけ大きく | **仮**：丸い仮の顔。使うサービス未定 |
 | 動画 | 縦長1080×1920、字幕54px、問いかけを1秒で1文字ずつ | `make_video.py` で作れる（BGMは未） |
@@ -18,7 +18,7 @@
 
 ```bash
 pip install pyopenjtalk pillow numpy
-apt-get install -y fonts-noto-cjk
+apt-get install -y fonts-noto-cjk   # 太字の Black が無ければ Bold で代用する
 python3 engine/make_video.py customers/aen/work/6708844608416389033.script.json <出力フォルダー>
 ```
 

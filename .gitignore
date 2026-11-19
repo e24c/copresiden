@@ -15,3 +15,7 @@ Thumbs.db
 *.mov
 *.wav
 *.m4a
+
+# 動画の出力・Pythonのキャッシュ
+out/
+__pycache__/

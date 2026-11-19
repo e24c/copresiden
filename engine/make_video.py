@@ -31,8 +31,10 @@ W, H = 1080, 1920
 FPS = 30
 SR = 48000
 
-FONT_BLACK = "/usr/share/fonts/opentype/noto/NotoSansCJK-Black.ttc"
 FONT_BOLD = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
+FONT_BLACK = "/usr/share/fonts/opentype/noto/NotoSansCJK-Black.ttc"
+if not Path(FONT_BLACK).exists():  # fonts-noto-cjk だけでは Black が入らない（fonts-noto-cjk-extra にある）
+    FONT_BLACK = FONT_BOLD
 FONT_REG = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
 JP = 0  # ttc の中の日本語の字体の番号
 
