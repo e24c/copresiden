@@ -20,7 +20,9 @@
 - Jotform APIの鍵は通った（200）。環境「CoPresiden」で `files.jotform.com`（動画の本体）と `huggingface.co`・`us.aws.cdn.hf.co`（文字起こしのモデル）への通信を許可した
 - 送信 6708844608416389033 の動画を取り込み、文字起こし・字幕読み取り・裏取り・台本の下書きまで済んだ。作業記録：`customers/aen/work/6708844608416389033.md`
 - 文字起こしは faster-whisper（medium）。モデル取得は `HF_HUB_DISABLE_XET=1` を付ける
-- 次は高田さんの台本確認。そのあと台帳・シリーズ設定づくり
+- 台本は第4版で高田さんの了解を得て、全体の組み上げに進んだ（`engine/README.md` の表が最新の状況）
+- 試作の動画（声・絵・アバターは仮）を作り、承認フォームを作り、知らせメールをGmailの下書きにした（動画を添付）
+- 残り：Geminiの鍵（環境の設定でネットワークシークレット、ホスト `generativelanguage.googleapis.com`、ヘッダー `x-goog-api-key`）、声のモデルとアバターのサービス選び、SharePointに動画を置く方法、BGM、夜の定期タスク化
 
 ## （済）以前詰まっていたこと
 
