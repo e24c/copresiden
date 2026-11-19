@@ -10,7 +10,7 @@
 
 いまの部品は「仮」:
     声   … Open JTalk の標準の声（お客様の声のモデルができたら差し替える）
-    写真 … 図のカード（Gemini の鍵が入ったら写真に差し替える）
+    写真 … 環境変数 GEMINI_API_KEY があれば Gemini の写真、無ければ図のカード
     アバター … 丸い仮の顔（アバターができたら差し替える）
 """
 
@@ -254,6 +254,66 @@ def scene_card(visual: dict) -> Image.Image:
     return im
 
 
+# ---------------------------------------------------------------- 写真（Gemini）
+
+GEMINI_MODEL = "gemini-2.5-flash-image"  # 新しい型が出たらここを替える
+
+
+def gemini_photo(prompt: str, cache: Path) -> Image.Image | None:
+    """環境変数 GEMINI_API_KEY があれば写真を作る。無ければ None（カードで代用）。
+
+    鍵はリポジトリにもログにも書かない。作った写真は cache に置き、同じ指示では作り直さない。
+    """
+    import base64
+    import hashlib
+    import os
+    import urllib.request
+
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key or not prompt:
+        return None
+    cache.mkdir(parents=True, exist_ok=True)
+    f = cache / (hashlib.sha1(prompt.encode()).hexdigest()[:16] + ".png")
+    if not f.exists():
+        body = json.dumps({
+            "contents": [{"parts": [{"text": prompt + "。写真のみ。文字やロゴは入れない。"}]}],
+            "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": "4:5"}},
+        }).encode()
+        req = urllib.request.Request(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+            data=body, headers={"Content-Type": "application/json", "x-goog-api-key": key})
+        with urllib.request.urlopen(req, timeout=180) as r:
+            res = json.load(r)
+        parts = res["candidates"][0]["content"]["parts"]
+        data = next(p["inlineData"]["data"] for p in parts if "inlineData" in p)
+        f.write_bytes(base64.b64decode(data))
+    return Image.open(f).convert("RGB")
+
+
+def scene_photo(photo: Image.Image, visual: dict) -> Image.Image:
+    """写真を主役にした場面（美容など見た目の業種）。見出しは上に小さく。"""
+    im = background()
+    d = ImageDraw.Draw(im)
+    box = (60, SAFE_TOP, W - 60, CAPTION_Y - 50)
+    bw, bh = box[2] - box[0], box[3] - box[1]
+    pw, ph = photo.size
+    sc = max(bw / pw, bh / ph)
+    ph_img = photo.resize((int(pw * sc), int(ph * sc)))
+    ox, oy = (ph_img.width - bw) // 2, (ph_img.height - bh) // 2
+    ph_img = ph_img.crop((ox, oy, ox + bw, oy + bh))
+    mask = Image.new("L", (bw, bh), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, bw - 1, bh - 1], 48, fill=255)
+    im.paste(ph_img, box[:2], mask)
+    if visual.get("step"):
+        f = font(FONT_BLACK, 44)
+        tag = f"手順 {visual['step']}"
+        tw = f.getlength(tag)
+        d.rounded_rectangle([100, SAFE_TOP + 40, 100 + tw + 60, SAFE_TOP + 120], 40, fill=ACCENT)
+        d.text((130, SAFE_TOP + 80), tag, font=f, fill=SOFT, anchor="lm")
+    d.text((W - 90, CAPTION_Y - 100), "AI画像", font=font(FONT_BOLD, 30), fill=SOFT, anchor="ra")
+    return im
+
+
 # ---------------------------------------------------------------- アバター（仮）
 
 
@@ -355,7 +415,11 @@ def build(script_path: Path, out_dir: Path) -> None:
         w.writeframes((audio * 32767).astype(np.int16).tobytes())
 
     # 2. 絵を先に作っておく
-    scene_imgs = [scene_card(sc["visual"]).convert("RGBA") for sc in spec["scenes"]]
+    scene_imgs = []
+    for sc in spec["scenes"]:
+        photo = gemini_photo(sc.get("photo_prompt", ""), out_dir / "photos")
+        img = scene_photo(photo, sc["visual"]) if photo else scene_card(sc["visual"])
+        scene_imgs.append(img.convert("RGBA"))
     cap_imgs = [caption_layer(c.text) for c in cues]
     av_small = avatar(AVATAR_SMALL)
     av_big = avatar(560)
