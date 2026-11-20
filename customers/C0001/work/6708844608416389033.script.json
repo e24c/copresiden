@@ -3,6 +3,9 @@
   "customer": "C0001",
   "template": "01_hitokoto-memo",
   "series": "シリーズ1",
+  "series_name": "美容師あやのひとことメモ",
+  "background": "series1",
+  "avatar": {"outfit": "gray"},
   "version": 4,
   "opening": {
     "question": "毎日こつこつ続けると…"

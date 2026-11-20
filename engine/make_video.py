@@ -47,7 +47,8 @@ ACCENT = (176, 122, 84)
 SOFT = (255, 252, 247)
 
 CAPTION_SIZE = 54  # デザインのルール：字幕は 54px
-SAFE_TOP = 230  # 投稿先の画面の上の帯にかからないように
+SAFE_TOP = 230  # 投稿先の画面の上の帯にかからないように（シリーズの背景を使うときは、シリーズ名の下まで下げる）
+SERIES_BG: Image.Image | None = None  # シリーズの背景（copresiden-assets の <顧客コード>/backgrounds/）
 CAPTION_Y = 1290
 AVATAR_SMALL = 230
 AVATAR_POS = (60, 1500)
@@ -154,6 +155,8 @@ def wrap_phrases(text: str, f: ImageFont.FreeTypeFont, max_w: int) -> list[str]:
 
 
 def background() -> Image.Image:
+    if SERIES_BG is not None:
+        return SERIES_BG.copy()
     g = np.linspace(0, 1, H)[:, None]
     top = np.array(BG_TOP)[None, None, :]
     bot = np.array(BG_BOTTOM)[None, None, :]
@@ -361,16 +364,16 @@ def opening_layer(question: str, n_chars: int) -> Image.Image:
     """最初の1秒：問いかけを1文字ずつ出す。"""
     im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
-    f = font(FONT_BLACK, 92)
-    lines = wrap(question, f, W - 160)
+    f = font(FONT_BLACK, 80)  # 背景の枠線（左右42px）の内側に収める
+    lines = wrap(question, f, W - 240)
     shown = n_chars
-    y = 300
+    y = SAFE_TOP + 70
     for line in lines:
         part = line[: max(0, shown)]
         shown -= len(line)
         d.text((W // 2 + 4, y + 4), part, font=f, fill=(0, 0, 0, 60), anchor="mt")
         d.text((W // 2, y), part, font=f, fill=ACCENT, anchor="mt")
-        y += 130
+        y += 112
     return im
 
 
@@ -404,6 +407,14 @@ def build(script_path: Path, out_dir: Path) -> None:
                 text = text.replace(k, v)
             return voice(text)
         print(f"声：{pdir.name} の声のモデル")
+    global SERIES_BG, SAFE_TOP
+    bg_name = spec.get("background")  # 例："series1"（<顧客コード>/backgrounds/series1.jpg）
+    if pdir and bg_name:
+        f = pdir / "backgrounds" / f"{bg_name}.jpg"
+        if f.exists():
+            SERIES_BG = Image.open(f).convert("RGB").resize((W, H))
+            SAFE_TOP = 330  # シリーズ名（上から 120〜290px）の下から始める
+            print(f"背景：{pdir.name}/backgrounds/{bg_name}.jpg")
     if pdir and (pdir / "avatar").is_dir():
         av = persona.Avatar(pdir / "avatar", spec.get("avatar", {}).get("outfit", "gray"))
         print(f"アバター：{pdir.name}（{spec.get('avatar', {}).get('outfit', 'gray')}）")
