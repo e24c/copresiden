@@ -115,12 +115,35 @@ def vertical_text(lines: list[str], size: int = 88) -> Image.Image:
     return glow
 
 
+def wrap_jp(text: str, f: ImageFont.FreeTypeFont, max_w: int) -> list[str]:
+    """読点で改行し、それでも長い部分は助詞のあとで切る（言葉の途中で切らない）。"""
+    out: list[str] = []
+    segs = [x for x in text.replace("、", "、\n").split("\n") if x]
+    cur = ""
+    for seg in segs:
+        if f.getlength(cur + seg) <= max_w:
+            cur += seg
+            continue
+        if cur:
+            out.append(cur)
+        cur = seg
+        while f.getlength(cur) > max_w:
+            # 入りきる範囲で、いちばん後ろの助詞のあとで切る。無ければ入るところまで
+            fit = max(i for i in range(1, len(cur) + 1) if f.getlength(cur[:i]) <= max_w)
+            cut = next((i for i in range(fit, 1, -1) if cur[i - 1] in "がをにはでとのもへや"), fit)
+            out.append(cur[:cut])
+            cur = cur[cut:]
+    if cur:
+        out.append(cur)
+    return out
+
+
 def caption_layer(text: str, x0: int, bottom: int) -> Image.Image:
     """字幕：白い太字に黒いふち。アバターの右に、下をそろえて3行まで。"""
     im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     f = font(SANS, 44)
-    lines = mv.wrap_phrases(text, f, W - x0 - 36)  # 読点で改行して、言葉の途中で切らない
+    lines = wrap_jp(text, f, W - x0 - 36)
     lh = 58
     y = bottom - lh * len(lines)
     for line in lines:
@@ -247,8 +270,12 @@ def build(script_path: Path, out_dir: Path) -> None:
     n_open = sum(len(l) for l in open_lines)
     open_end = spans[0][1]
     welcome_until = 2.5  # オープニングの最初は「こちらへ」のポーズ（手本 ep1）
-    BIG = ((96, 380, 1696, 2388), 900)
-    SMALL = ((346, 430, 1446, 1750), 360)
+    # アバターの切り出し：髪のいちばん上から少し余白をとる（画像から測る。決め打ちだと頭が切れた）
+    hair_top = min(int(np.where(np.asarray(av.alpha[k]).max(1) > 128)[0].min()) for k in ("closed", "welcome"))
+    y0 = max(0, hair_top - 50)
+    fw = av.full["closed"].width
+    BIG = ((40, y0, fw - 40, av.full["closed"].height), 900)
+    SMALL = ((fw // 2 - 560, y0, fw // 2 + 560, y0 + 1330), 360)
 
     cmd = ["ffmpeg", "-v", "error", "-y",
            "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",
