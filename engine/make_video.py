@@ -8,10 +8,11 @@
     post.txt    … 投稿の説明欄の下書き（「AI音声」を入れる）
     timing.json … 字幕の時刻（点検用）
 
-いまの部品は「仮」:
-    声   … Open JTalk の標準の声（お客様の声のモデルができたら差し替える）
+部品:
+    声   … copresiden-assets の <顧客コード>/voice があれば Style-Bert-VITS2（本人の声）。無ければ仮の声（Open JTalk）
     写真 … 環境変数 GEMINI_API_KEY があれば Gemini の写真、無ければ図のカード
-    アバター … 丸い仮の顔（アバターができたら差し替える）
+    アバター … copresiden-assets の <顧客コード>/avatar があれば本人のアバター（口パク・まばたき・ポーズ）。無ければ丸い仮の顔
+    置き場所は環境変数 COPRESIDEN_ASSETS（既定 ../copresiden-assets）。ルールは docs/assets.md
 """
 
 from __future__ import annotations
@@ -50,6 +51,11 @@ SAFE_TOP = 230  # 投稿先の画面の上の帯にかからないように
 CAPTION_Y = 1290
 AVATAR_SMALL = 230
 AVATAR_POS = (60, 1500)
+# 本人のアバター（背景つきの画像なので角の丸いカードで見せる）
+CARD_SMALL = (240, 312)
+CARD_SMALL_POS = (50, 1530)
+CARD_BIG = (620, 806)
+CARD_BIG_Y = 620
 
 
 def font(path: str, size: int) -> ImageFont.FreeTypeFont:
@@ -385,6 +391,23 @@ def build(script_path: Path, out_dir: Path) -> None:
     reading = spec.get("reading", {})
     gap = 0.25
 
+    # 0. お客様の声とアバター（無ければ仮のもの）
+    import persona
+    pdir = persona.assets_dir(spec.get("customer", ""))
+    say = lambda text: synth(text, reading)  # noqa: E731
+    av = None
+    if pdir and (pdir / "voice" / "model.safetensors").exists():
+        voice = persona.Voice(pdir / "voice", SR, **spec.get("voice", {}))
+
+        def say(text: str) -> np.ndarray:
+            for k, v in reading.items():
+                text = text.replace(k, v)
+            return voice(text)
+        print(f"声：{pdir.name} の声のモデル")
+    if pdir and (pdir / "avatar").is_dir():
+        av = persona.Avatar(pdir / "avatar", spec.get("avatar", {}).get("outfit", "gray"))
+        print(f"アバター：{pdir.name}（{spec.get('avatar', {}).get('outfit', 'gray')}）")
+
     # 1. 声と字幕の時刻
     audio_parts: list[np.ndarray] = []
     cues: list[Cue] = []
@@ -395,7 +418,7 @@ def build(script_path: Path, out_dir: Path) -> None:
         chunks = split_caption(sc["voice"])
         s0 = t
         for ch in chunks:
-            a = synth(ch, reading)
+            a = say(ch)
             dur = len(a) / SR
             cues.append(Cue(t, t + dur + gap, ch, si))
             audio_parts += [a, np.zeros(int(SR * gap), np.float32)]
@@ -425,10 +448,14 @@ def build(script_path: Path, out_dir: Path) -> None:
     cap_imgs = [caption_layer(c.text) for c in cues]
     av_small = avatar(AVATAR_SMALL)
     av_big = avatar(560)
+    n_frames = int(total * FPS)
+    if av:
+        mouths = persona.mouth_track(audio, SR, FPS)
+        blinks = persona.blink_track(n_frames, FPS)
+        last_scene_start = scene_spans[-1][0]
     question = spec.get("opening", {}).get("question", "")
 
     # 3. 1コマずつ描いて ffmpeg に流す
-    n_frames = int(total * FPS)
     cmd = [
         "ffmpeg", "-v", "error", "-y",
         "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",
@@ -455,7 +482,18 @@ def build(script_path: Path, out_dir: Path) -> None:
             n = int(len(question) * min(1.0, tt / 1.0)) + 1
             frame = background().convert("RGBA")
             frame.alpha_composite(opening_layer(question, n))
-            frame.alpha_composite(av_big, ((W - 560) // 2, 820))
+            if av:
+                # 指差しで問いかけを示す（デザインのルール）
+                key = "point_blink" if blinks[fi] else "point"
+                frame.alpha_composite(av.card(key, *CARD_BIG), ((W - CARD_BIG[0]) // 2, CARD_BIG_Y))
+            else:
+                frame.alpha_composite(av_big, ((W - 560) // 2, 820))
+        elif av:
+            if tt >= last_scene_start:
+                key = "welcome"  # 締めは「こちらへ」
+            else:
+                key = mouths[min(fi, len(mouths) - 1)] + ("_blink" if blinks[fi] else "")
+            frame.alpha_composite(av.card(key, *CARD_SMALL, radius=28), CARD_SMALL_POS)
         else:
             frame.alpha_composite(av_small, AVATAR_POS)
         cue = next((i for i, c in enumerate(cues) if c.start <= tt < c.end), None)
