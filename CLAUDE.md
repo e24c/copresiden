@@ -6,7 +6,7 @@
 
 - 共通ルール：`docs/rules/` をすべて読んでから作る
 - 型：`templates/` から、入稿で選ばれた型のファイルを読む
-- お客様：SharePoint のリスト「顧客台帳」で状態を確かめ（`docs/customers.md`）、`customers/<顧客コード>/ledger.md`（台帳）と `series.md`（シリーズ設定）を読む
+- お客様：顧客台帳の書き出し（SharePoint `System/customers.csv`、`docs/customers.md` の6）で状態を確かめ、`customers/<顧客コード>/ledger.md`（台帳）と `series.md`（シリーズ設定）を読む
 - 鍵やパスワードは、このリポジトリにもログにも書かない
 
 ## 1. 入稿を集める
