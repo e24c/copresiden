@@ -287,16 +287,24 @@ def gemini_photo(prompt: str, cache: Path) -> Image.Image | None:
     f = cache / (hashlib.sha1(prompt.encode()).hexdigest()[:16] + ".png")
     if not f.exists():
         body = json.dumps({
-            "contents": [{"parts": [{"text": prompt + "。写真のみ。文字やロゴは入れない。"}]}],
+            "contents": [{"parts": [{"text": prompt + "。画像だけを作る。文字やロゴは入れない。"}]}],
             "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": "4:5"}},
         }).encode()
         req = urllib.request.Request(
             f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
             data=body, headers={"Content-Type": "application/json", "x-goog-api-key": key})
-        with urllib.request.urlopen(req, timeout=180) as r:
-            res = json.load(r)
-        parts = res["candidates"][0]["content"]["parts"]
-        data = next(p["inlineData"]["data"] for p in parts if "inlineData" in p)
+        data = None
+        for attempt in range(3):  # 画像が返らないことがたまにある（finishReason だけ返る）
+            with urllib.request.urlopen(req, timeout=180) as r:
+                res = json.load(r)
+            cand = (res.get("candidates") or [{}])[0]
+            parts = cand.get("content", {}).get("parts", [])
+            data = next((p["inlineData"]["data"] for p in parts if "inlineData" in p), None)
+            if data:
+                break
+            print(f"写真：画像が返らなかった（{cand.get('finishReason')}）。{attempt + 1}回目")
+        if not data:
+            return None
         f.write_bytes(base64.b64decode(data))
     return Image.open(f).convert("RGB")
 

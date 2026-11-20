@@ -77,6 +77,26 @@ def _patch(base: Image.Image, src: Image.Image, box: tuple[int, int, int, int], 
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
 
 
+def cutout_alpha(img: Image.Image, tol: int = 22) -> Image.Image:
+    """背景（画像のふちとつながった、ふちと同じ色の部分）を透明にするための alpha。
+
+    背景つきの JPEG 用。背景と同じ色の服（白い背景に白のTシャツなど）は切り抜けない。
+    正式なアバター画像は背景が透明な PNG で作ってもらう（docs/assets.md、docs/issues.md の3）。
+    """
+    import cv2
+
+    a = np.asarray(img.convert("RGB")).astype(np.int16)
+    border = np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]])
+    bg = np.median(border, 0)
+    cand = (np.abs(a - bg).max(2) < tol).astype(np.uint8)
+    _, lab = cv2.connectedComponents(cand, connectivity=4)
+    edge = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))) - {0}
+    fg = (~np.isin(lab, list(edge))).astype(np.uint8) * 255
+    fg = cv2.morphologyEx(fg, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    fg = cv2.erode(fg, np.ones((3, 3), np.uint8))
+    return Image.fromarray(cv2.GaussianBlur(fg, (0, 0), 1.5))
+
+
 class Avatar:
     """口パク（声の大きさで closed／half／open）、まばたき、ポーズ（point／welcome）。"""
 
@@ -91,34 +111,54 @@ class Avatar:
         d = avatar_dir / outfit
         if not d.is_dir():
             d = next(p for p in sorted(avatar_dir.iterdir()) if p.is_dir())
+        self.outfit = d.name
 
         def load(name: str) -> Image.Image | None:
             for ext in (".png", ".jpg", ".jpeg"):
                 f = d / (name + ext)
                 if f.exists():
-                    return Image.open(f).convert("RGB").crop(self.CROP)
+                    return Image.open(f)
             return None
 
-        closed = load("closed")
+        def rgb_alpha(im: Image.Image) -> tuple[Image.Image, Image.Image]:
+            if im.mode == "RGBA":  # 背景が透明な PNG はそのまま使う
+                return im.convert("RGB"), im.getchannel("A")
+            return im.convert("RGB"), cutout_alpha(im)
+
+        closed, self.alpha_face = rgb_alpha(load("closed"))
         raw = {k: load(k) for k in ("half", "open", "blink", "point", "point_blink", "welcome")}
+        raw = {k: (v.convert("RGB") if k in ("half", "open", "blink") and v is not None else v) for k, v in raw.items()}
         raw["half"] = raw["half"] or raw["open"] or closed
         raw["open"] = raw["open"] or raw["half"]
-        ox, oy = self.CROP[0], self.CROP[1]
-        mouth = (self.MOUTH[0] - ox, self.MOUTH[1] - oy, self.MOUTH[2] - ox, self.MOUTH[3] - oy)
-        eyes = (self.EYES[0] - ox, self.EYES[1] - oy, self.EYES[2] - ox, self.EYES[3] - oy)
-        self.img = {"closed": closed}
+        self.full = {"closed": closed}
         for k in ("half", "open"):
-            self.img[k] = _patch(closed, raw[k], mouth)
+            self.full[k] = _patch(closed, raw[k], self.MOUTH)
         for k in ("closed", "half", "open"):
-            self.img[k + "_blink"] = _patch(self.img[k], raw["blink"], eyes) if raw["blink"] else self.img[k]
-        # ポーズは手の形が違うので、まるごと使う。無いものは近いもので代用する（docs/assets.md）
-        self.img["point"] = raw["point"] or self.img["open"]
-        self.img["point_blink"] = raw["point_blink"] or self.img["point"]
-        self.img["welcome"] = raw["welcome"] or self.img["point"]
-        self._cache: dict[tuple[str, int, int], Image.Image] = {}
+            self.full[k + "_blink"] = _patch(self.full[k], raw["blink"], self.EYES) if raw["blink"] else self.full[k]
+        # ポーズは手の形が違うので、まるごと使う（alpha も画像ごと）。無いものは近いもので代用する（docs/assets.md）
+        self.alpha = {k: self.alpha_face for k in self.full}
+        for k in ("point", "point_blink", "welcome"):
+            if raw[k] is not None:
+                self.full[k], self.alpha[k] = rgb_alpha(raw[k])
+        for k, alt in (("point", "open"), ("point_blink", "point"), ("welcome", "point")):
+            if k not in self.full:
+                self.full[k], self.alpha[k] = self.full[alt], self.alpha[alt]
+        self.img = {k: v.crop(self.CROP) for k, v in self.full.items()}  # カード用
+        self._cache: dict[tuple, Image.Image] = {}
+
+    def cut(self, key: str, box: tuple[int, int, int, int], width: int) -> Image.Image:
+        """背景を切り抜いた画像（元画像の box の範囲を、幅 width にして返す）。"""
+        ck = ("cut", key, box, width)
+        if ck not in self._cache:
+            im = self.full[key].convert("RGBA")
+            im.putalpha(self.alpha[key])
+            im = im.crop(box)
+            h = round(im.height * width / im.width)
+            self._cache[ck] = im.resize((width, h), Image.LANCZOS)
+        return self._cache[ck]
 
     def card(self, key: str, w: int, h: int, radius: int = 36) -> Image.Image:
-        """角の丸いカード（背景つきの画像なので、切り抜かずにカードで見せる）。"""
+        """角の丸いカード（背景つきのまま見せる）。"""
         ck = (key, w, h)
         if ck not in self._cache:
             im = self.img[key]
