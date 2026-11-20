@@ -19,7 +19,7 @@
 ```bash
 pip install pyopenjtalk pillow numpy
 apt-get install -y fonts-noto-cjk   # 太字の Black が無ければ Bold で代用する
-python3 engine/make_video.py customers/aen/work/6708844608416389033.script.json <出力フォルダー>
+python3 engine/make_video.py customers/C0001/work/6708844608416389033.script.json <出力フォルダー>
 ```
 
 出力は `video.mp4`、`post.txt`（説明欄の案、「※AI音声」入り）、`timing.json`（字幕の時刻）。
