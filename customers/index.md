@@ -4,4 +4,4 @@
 
 | 顧客コード | 呼び名 | リポジトリ | SharePoint（InformationExchange） |
 | --- | --- | --- | --- |
-| C0001 | A.EN（シミュレーション） | `customers/C0001` | `0001_AEN`（`C0001` に名前を変える予定） |
+| C0001 | A.EN（シミュレーション） | `customers/C0001` | `C0001` |
