@@ -249,7 +249,9 @@ def build(script_path: Path, out_dir: Path) -> None:
     scene_imgs = []
     for sc in spec["scenes"]:
         layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        photo = mv.gemini_photo(sc.get("photo_prompt", ""), out_dir / "photos")
+        model = spec.get("model_image")  # シリーズのモデルの人物（<顧客コード>/models/）
+        ref = (pdir / model) if (pdir and model and sc.get("model", True)) else None
+        photo = mv.gemini_photo(sc.get("photo_prompt", ""), out_dir / "photos", ref)
         if photo is not None:
             layer.alpha_composite(image_panel(photo, img_y), (0, img_y))
             if sc.get("label", "※イメージです"):

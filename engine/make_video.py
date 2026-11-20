@@ -270,9 +270,10 @@ def scene_card(visual: dict) -> Image.Image:
 GEMINI_MODEL = "gemini-2.5-flash-image"  # 新しい型が出たらここを替える
 
 
-def gemini_photo(prompt: str, cache: Path) -> Image.Image | None:
+def gemini_photo(prompt: str, cache: Path, ref: Path | None = None) -> Image.Image | None:
     """環境変数 GEMINI_API_KEY があれば写真を作る。無ければ None（カードで代用）。
 
+    ref：参照画像（シリーズのモデルの人物）。渡すと、同じ人物・同じ作風で作る（docs/rules/photo.md）。
     鍵はリポジトリにもログにも書かない。作った写真は cache に置き、同じ指示では作り直さない。
     """
     import base64
@@ -284,10 +285,17 @@ def gemini_photo(prompt: str, cache: Path) -> Image.Image | None:
     if not key or not prompt:
         return None
     cache.mkdir(parents=True, exist_ok=True)
-    f = cache / (hashlib.sha1(prompt.encode()).hexdigest()[:16] + ".png")
+    ref_bytes = ref.read_bytes() if ref else b""
+    f = cache / (hashlib.sha1(prompt.encode() + ref_bytes).hexdigest()[:16] + ".png")
     if not f.exists():
+        parts_in = [{"text": prompt + "。画像だけを作る。文字やロゴは入れない。"}]
+        if ref:
+            parts_in = [{"inlineData": {"mimeType": "image/png" if ref.suffix == ".png" else "image/jpeg",
+                                        "data": base64.b64encode(ref_bytes).decode()}},
+                        {"text": "この参照画像と同じ人物（顔・年代・髪型・髪の色・服）で、同じ写真の作風で作る。"},
+                        ] + parts_in
         body = json.dumps({
-            "contents": [{"parts": [{"text": prompt + "。画像だけを作る。文字やロゴは入れない。"}]}],
+            "contents": [{"parts": parts_in}],
             "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": "4:5"}},
         }).encode()
         req = urllib.request.Request(

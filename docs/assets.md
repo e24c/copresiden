@@ -28,6 +28,8 @@ copresiden-assets/
 │       │   ├─ point_blink.jpg 指差しポーズで目を閉じる（あれば。オープニングのまばたき）
 │       │   └─ welcome.jpg    こちらへポーズ（締め）
 │       └─ fullbody.jpg       全身
+│   ├─ models/
+│   │   └─ series1.png        シリーズのモデルの人物（画像の人物と作風を揃えるための参照画像）
 │   └─ backgrounds/
 │       └─ series1.jpg        シリーズの背景（テンプレートにシリーズ名を入れたもの。series1〜3）
 └─ …
